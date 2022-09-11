@@ -1,0 +1,6 @@
+{
+  "importMap": "./deno.json",
+  "imports": {
+    "type-fest": "https://raw.githubusercontent.com/vicary/type-fest/main/mod.ts"
+  }
+}

@@ -1,13 +1,13 @@
 import { Class, JsonValue, Promisable, SetOptional } from "type-fest";
-import { Runner } from "./Runner.ts";
-import { RunnerTask } from "./RunnerTask.ts";
-import { Worker, WorkerExecutionError } from "./Worker.ts";
+import { Executable } from "./Executable.ts";
+import { Runner, RunnerExecutionError } from "./Runner.ts";
+import { Task } from "./Task.ts";
 
 export type WorkerpoolOptions<TPayload = JsonValue, TResult = unknown> = {
   /**
-   * Classes which implements the Runner interface.
+   * Worker classes implementing the Executable interface.
    */
-  runners?: Class<Runner<TPayload, TResult>>[];
+  workers: Class<Executable<TPayload, TResult>>[];
 
   /**
    * Size of the worker pool, A.K.A. poolSize.
@@ -29,7 +29,7 @@ export type WorkerpoolOptions<TPayload = JsonValue, TResult = unknown> = {
    *
    * @default Infinity
    */
-  maximumTaskPerWorker?: number;
+  maximumTaskPerRunner?: number;
 
   /**
    * Implementation of task enqueuing.
@@ -37,37 +37,38 @@ export type WorkerpoolOptions<TPayload = JsonValue, TResult = unknown> = {
    * Retries will also call this method with the task object, this function
    * should reset the mutex lock if available.
    */
-  enqueue: (task: RunnerTask<TPayload>) => Promisable<void>;
+  enqueue: (task: Task<TPayload>) => Promisable<void>;
 
   /**
    * Retrieves the next pending task, this function should acquire mutex lock
    * for the task.
    */
-  dequeue: () => Promisable<RunnerTask<TPayload> | undefined>;
+  dequeue: () => Promisable<Task<TPayload> | undefined>;
 
   /**
    * Called when a dequeued task is successful, use this function to remove
    * finished tasks (mutex).
    */
-  success?: (task: RunnerTask<TPayload>, result: TResult) => Promisable<void>;
+  success?: (task: Task<TPayload>, result: TResult) => Promisable<void>;
 
   /**
    * Called when a failing task has exceeded maximum retries.
    */
-  failure?: (task: RunnerTask<TPayload>, error: Error) => Promisable<void>;
+  failure?: (task: Task<TPayload>, error: Error) => Promisable<void>;
 };
 
 export class Workerpool<TPayload = JsonValue, TResult = unknown> {
   #active = false;
+  #dequeueActive = false;
   #concurrency = 10;
   #maximumRetries = 0;
-  #maximumTaskPerWorker = Infinity;
-  #runnerFactories = new Map<string, Class<Runner<TPayload, TResult>>>();
-  #workers = new Set<Worker<TPayload, TResult>>();
+  #maximumTaskPerRunner = Infinity;
+  #runnerFactories = new Map<string, Class<Executable<TPayload, TResult>>>();
+  #runners = new Set<Runner<TPayload, TResult>>();
 
   constructor(readonly options: WorkerpoolOptions<TPayload, TResult>) {
-    options.runners?.forEach((runner) => {
-      this.#runnerFactories.set(runner.name, runner);
+    options.workers?.forEach((worker) => {
+      this.#runnerFactories.set(worker.name, worker);
     });
 
     if (options.concurrency) {
@@ -78,13 +79,13 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
       this.#maximumRetries = options.maximumRetries;
     }
 
-    if (options.maximumTaskPerWorker) {
-      this.#maximumTaskPerWorker = options.maximumTaskPerWorker;
+    if (options.maximumTaskPerRunner) {
+      this.#maximumTaskPerRunner = options.maximumTaskPerRunner;
     }
   }
 
-  get workerCount() {
-    return this.#workers.size;
+  get concurrency() {
+    return this.#runners.size;
   }
 
   start() {
@@ -93,7 +94,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     }
 
     this.#active = true;
-    this.#dequeue();
+    this.#startDequeue();
 
     return this;
   }
@@ -102,7 +103,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     this.#active = false;
 
     // Trigger runner disposal if the queue is already empty.
-    this.#dequeue();
+    this.#startDequeue();
   }
 
   /**
@@ -115,12 +116,14 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
   enqueue({
     executionCount = 0,
     ...task
-  }: SetOptional<RunnerTask<TPayload>, "executionCount">) {
+  }: SetOptional<Task<TPayload>, "executionCount">) {
     const doEnqueue = async () => {
       await this.options.enqueue({ executionCount, ...task });
 
       // Don't await for task executions here.
-      this.#dequeue();
+      if (this.#active && this.#runners.size === 0) {
+        this.#startDequeue();
+      }
     };
 
     doEnqueue();
@@ -128,39 +131,48 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     return this;
   }
 
+  async #startDequeue() {
+    if (!this.#active) {
+      return await this.#disposeIdleRunners();
+    }
+
+    // The idea is to maintain one and only one active dequeuing chain at a time.
+    if (this.#dequeueActive) {
+      return;
+    }
+
+    this.#dequeueActive = true;
+    return await this.#dequeue();
+  }
+
   async #dequeue() {
     if (!this.#active) {
-      // Release idle runners
-      await Promise.all(
-        [...this.#workers]
-          .filter((worker) => !worker.busy)
-          .map((worker) => worker.dispose())
-      );
-
-      return;
+      this.#dequeueActive = false;
+      return await this.#disposeIdleRunners();
     }
 
     const task = await this.options.dequeue();
-    // No tasks available yet, wait for the next dequeue.
+    // No tasks available, mark inactive and wait for next enqueue.
     if (!task) {
-      return;
+      this.#dequeueActive = false;
+      return await this.#disposeIdleRunners();
     }
 
-    const worker = await this.#getWorker(task.name);
-    // No workers available yet, wait for the next dequeue.
-    if (!worker) {
-      await this.options.enqueue(task);
-      return;
+    const runner = this.#getRunner(task.name);
+    // No runners available yet, wait for the next dequeue.
+    if (!runner) {
+      return await this.options.enqueue(task);
     }
 
     task.executionCount++;
-    worker
+
+    runner
       .execute(task.payload)
       .then(
         (result) => this.options.success?.(task, result),
         (error) => {
           if (
-            error instanceof WorkerExecutionError &&
+            error instanceof RunnerExecutionError &&
             error.retryable &&
             task.executionCount < this.#maximumRetries
           ) {
@@ -171,8 +183,8 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
         }
       )
       .finally(() => {
-        if (worker.executionCount >= this.#maximumTaskPerWorker) {
-          this.#workers.delete(worker);
+        if (runner.executionCount >= this.#maximumTaskPerRunner) {
+          this.#runners.delete(runner);
         }
 
         this.#dequeue();
@@ -181,44 +193,52 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     this.#dequeue();
   }
 
-  async #getWorker(
-    name: string
-  ): Promise<Worker<TPayload, TResult> | undefined> {
-    const idleWorkers = [...this.#workers].filter((worker) => !worker.busy);
-    const worker = idleWorkers.find(
-      ({ name: workerName }) => workerName === name
+  async #disposeIdleRunners() {
+    // Release idle runners
+    const idleRunners = [...this.#runners].filter((runner) => !runner.busy);
+
+    await Promise.all(idleRunners.map((runner) => runner.dispose()));
+
+    for (const runner of idleRunners) {
+      this.#runners.delete(runner);
+    }
+  }
+
+  #getRunner(name: string): Runner<TPayload, TResult> | undefined {
+    const idleRunners = [...this.#runners].filter((runner) => !runner.busy);
+    const runner = idleRunners.find(
+      ({ name: runnerName }) => runnerName === name
     );
-    if (worker) {
-      return worker;
+    if (runner) {
+      return runner;
     }
 
-    if (this.#workers.size < this.#concurrency) {
-      const runnerClass = this.#runnerFactories.get(name);
-      if (!runnerClass) {
-        throw new Error(`No runner is named ${name}.`);
+    if (this.#runners.size < this.#concurrency) {
+      const executableClass = this.#runnerFactories.get(name);
+      if (!executableClass) {
+        throw new Error(`No executable is named ${name}.`);
       }
 
-      const workerInstance = new Worker<TPayload, TResult>(
-        new runnerClass(),
-        runnerClass.name
+      const runnerInstance = new Runner<TPayload, TResult>(
+        new executableClass(),
+        executableClass.name
       );
 
-      this.#workers.add(workerInstance);
+      this.#runners.add(runnerInstance);
 
-      return workerInstance;
+      return runnerInstance;
     } else {
-      // Discard idle workers of other types, if available.
-      const idleWorker = idleWorkers.find(
-        ({ name: workerName }) => workerName !== name
+      // Discard idle runners of other types, if available.
+      const idleRunner = idleRunners.find(
+        ({ name: runnerName }) => runnerName !== name
       );
 
-      if (idleWorker) {
-        this.#workers.delete(idleWorker);
+      if (idleRunner) {
+        this.#runners.delete(idleRunner);
 
-        // Hint: To increase concurrency, to not await in runners.
-        await idleWorker.dispose();
+        idleRunner.dispose();
 
-        return this.#getWorker(name);
+        return this.#getRunner(name);
       }
     }
   }

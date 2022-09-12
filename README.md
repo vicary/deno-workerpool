@@ -10,38 +10,38 @@ An unopinionated small scale worker pool abstraction which serves as a base inte
 
 1. **Workerpool**
 
-   A manager that creates workers on the fly, executing tasks up to defined
-   concurrency.
+   A manager that creates workers on the fly, executing tasks up to defined concurrency.
 
-2. **Workers**
+2. **Runner**
 
-   Workers\* are internal wrappers for user provided runner classes, they maintain internal states such as active/busy and the retry counter.
+   Runners are internal wrappers for user provided runner classes, they maintain internal states such as active/busy and the retry counter.
 
-   _\* Not to be confused with Web Workers._
+3. **Executable**
 
-3. **Runners**
+   User implementation of task executors, where they all implements the `Executable` interface.
 
-   User implementation of task executors, where they all implements the `Runner`
-   interface.
+   Also called _workers_ for the sake of naming convension, but the usage kept minimal to avoid confusion with Web Workers.
 
-4. **Tasks**
+4. **Task**
 
    Tasks are named payloads enqueued into a workerpool.
 
 ## Basic Usage
 
 ```ts
-class RunnerA implements Runner {...}
-class RunnerB implements Runner {...}
+import { Executable, Workerpool } from "https://deno.land/x/workerpool/mod.ts";
+
+class FooWorker implements Executable {...}
+class BarWorker implements Executable {...}
 
 const pool = new Workerpool({
   concurrency: 2,
-  runners: [RunnerA, RunnerB]
+  workers: [FooWorker, BarWorker]
 });
 
 pool
-  .enqueue({ name: "RunnerA", payload: {...} })
-  .enqueue({ name: "RunnerB", payload: {...} })
+  .enqueue({ name: "FooWorker", payload: {...} })
+  .enqueue({ name: "BarWorker", payload: {...} })
   .start();
 ```
 
@@ -54,10 +54,9 @@ As a proof of concept, this is the most basic implementation of an in-memory que
 ```ts
 type Payload = any;
 
-type MemoryMutexTask = RunnerTask<Payload> & { active?: boolean };
+type MemoryMutexTask = Task<Payload> & { active?: boolean };
 
 const tasks: MemoryMutexTask[] = [];
-
 const pool = new Workerpool<Payload>({
   concurrency: 1,
   runners: [runnerA, runnerB],

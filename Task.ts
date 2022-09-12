@@ -1,6 +1,6 @@
 import { JsonValue } from "type-fest";
 
-export interface RunnerTask<TPayload = JsonValue> {
+export interface Task<TPayload = JsonValue> {
   /**
    * Optional task id for easier mutex in database.
    */

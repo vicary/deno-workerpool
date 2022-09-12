@@ -1,28 +1,82 @@
-import { Promisable } from "type-fest";
+import { Executable } from "./Executable.ts";
+
+export class RunnerExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly name: string,
+    readonly retryable = false
+  ) {
+    super(message);
+  }
+}
 
 /**
- * The Runner interface.
+ * A wrapper class for task runners.
  */
-export interface Runner<
-  TPayload = unknown,
-  TResult = unknown,
-  TError extends Error = Error
-> {
-  execute: (payload: TPayload) => Promisable<TResult>;
+export class Runner<TPayload = unknown, TResult = unknown> {
+  #executionnCount = 0;
+  #successCount = 0;
+  #failureCount = 0;
 
-  onSuccess?: (result: TResult) => Promisable<void>;
+  #busy = false;
 
-  /**
-   * Called when execute throws an error.
-   *
-   * This function may return a boolean to indicate if the task can be retried,
-   * defaults to true and always retries.
-   */
-  onFailure?: (error: TError) => Promisable<boolean | void>;
+  constructor(
+    readonly runner: Executable<TPayload, TResult>,
+    readonly name: string
+  ) {}
 
-  /**
-   * Optional cleanup method to be called when the runner is about to be dropped
-   * due to concurrency overload, e.g. Workers#terminate() or DataSource#destroy().
-   */
-  dispose?: () => Promisable<void>;
+  get busy() {
+    return this.#busy;
+  }
+
+  get executionCount() {
+    return this.#executionnCount;
+  }
+
+  get successCount() {
+    return this.#successCount;
+  }
+
+  get failureCount() {
+    return this.#failureCount;
+  }
+
+  async execute(payload: TPayload): Promise<TResult> {
+    if (this.#busy) {
+      throw new Error(`Runner ${this.name} is busy.`);
+    }
+
+    this.#busy = true;
+
+    try {
+      const result = await this.runner.execute(payload);
+
+      this.#successCount++;
+
+      await this.runner.onSuccess?.(result);
+
+      return result;
+    } catch (error) {
+      if (!(error instanceof Error)) {
+        throw error;
+      }
+
+      this.#failureCount++;
+
+      const retryable = await this.runner.onFailure?.(error);
+
+      throw new RunnerExecutionError(
+        error.message,
+        error.name,
+        retryable ?? true
+      );
+    } finally {
+      this.#executionnCount++;
+      this.#busy = false;
+    }
+  }
+
+  dispose() {
+    return this.runner.dispose?.();
+  }
 }

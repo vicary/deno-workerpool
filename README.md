@@ -88,12 +88,12 @@ const pool = new Workerpool<Payload>({
 
 ### Web Workers
 
-Deno has built-in support for workers, I'll use `comlink` to reduce codebase for simplicity.
+Deno has built-in support for workers, our `ExecutableWorker` class serves as a simple proxy class via `comlink`.
 
 You'll need a separated script file for the worker.
 
 ```ts
-// myworker.ts
+// worker.ts
 import { expose } from "https://cdn.skypack.dev/comlink?dts";
 
 expose({
@@ -106,62 +106,24 @@ expose({
 });
 ```
 
-And a proxy class in your main thread.
-
-```ts
-// myrunner.ts
-import {
-  Remote,
-  UnproxyOrClone,
-  wrap,
-} from "https://cdn.skypack.dev/comlink?dts";
-import type { Runner } from "https://deno.land/x/workerpool/mod.ts";
-
-export class MyRunner<TPayload = string, TResult = string>
-  implements Runner<TPayload, TResult>
-{
-  #worker: Remote<Worker & Runner<TPayload, TResult>>;
-
-  constructor() {
-    const worker = new Worker(new URL("./myworker.ts", import.meta.url).href, {
-      type: "module",
-    });
-
-    this.#worker = wrap<Worker & Runner<TPayload, TResult>>(worker);
-  }
-
-  execute(payload: TPayload) {
-    const result = this.#worker.execute(payload as UnproxyOrClone<TPayload>);
-
-    return result as Promisable<TResult>;
-  }
-
-  async onSuccess(result: TResult) {
-    const onSuccess = await this.#worker.onSuccess;
-    return onSuccess?.(result as UnproxyOrClone<TResult>);
-  }
-
-  async onFailure(error: Error) {
-    const onFailure = await this.#worker.onFailure;
-    return onFailure?.(error);
-  }
-
-  dispose() {
-    return this.#worker.terminate();
-  }
-}
-```
-
 Now register the runners into the workerpool:
 
 ```ts
+import { ExecutableWorker } from "https://deno.land/x/workerpool/mod.ts";
+
+class MyWorker extends ExecutableWorker<string, void> {
+  constructor() {
+    super(new URL("./worker.ts", import.meta.url).href);
+  }
+}
+
 const pool = new Workerpool({
   concurrency: 1,
-  runners: [MyRunner],
+  workers: [MyWorker],
 });
 
 pool
-  .enqueue({ name: "MyRunner", payload: "Hello World!" })
-  .enqueue({ name: "MyRunner", payload: "Hello Again!" })
+  .enqueue({ name: "MyWorker", payload: "Hello World!" })
+  .enqueue({ name: "MyWorker", payload: "Hello Again!" })
   .start();
 ```

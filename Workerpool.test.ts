@@ -107,19 +107,29 @@ describe("Workerpool", () => {
     assertSpyCalls(callback, 4);
   });
 
-      pool
-        .enqueue({ name: "runnerA", payload: callback })
-        .enqueue({ name: "runnerB", payload: callback })
-        .enqueue({ name: "runnerA", payload: callback })
-        .enqueue({ name: "runnerB", payload: callback })
-        .start();
+  it("should support web workers", async () => {
+    let counter = 0;
+    const callback = proxy(() => {
+      counter++;
     });
 
-    assertSpyCalls(callback, 4);
-    assertEquals(tasks.length, 0);
-  });
+    class workerC extends ExecutableWorker<ArrowFunction> {
+      constructor() {
+        super(new URL("./__test__/example-worker.ts", import.meta.url).href);
+      }
+    }
 
-  it("should work with workers", async () => {
-    // TODO:
+    const pool = await createMockQueue({
+      concurrency: 1,
+      workers: [workerC],
+      tasks: [
+        { name: "workerC", payload: callback },
+        { name: "workerC", payload: callback },
+      ],
+    });
+
+    pool.pause();
+
+    assertEquals(counter, 2);
   });
 });

@@ -1,9 +1,4 @@
-import {
-  releaseProxy,
-  Remote,
-  UnproxyOrClone,
-  wrap,
-} from "https://cdn.skypack.dev/comlink?dts";
+import { releaseProxy, Remote, UnproxyOrClone, wrap } from "comlink";
 import { Promisable } from "type-fest";
 import type { Executable } from "./Executable.ts";
 
@@ -44,8 +39,8 @@ export class ExecutableWorker<
     return onFailure?.(error);
   }
 
-  dispose() {
-    this.#linked[releaseProxy]();
+  async dispose() {
+    await this.#linked[releaseProxy]();
     this.#worker.terminate();
   }
 }

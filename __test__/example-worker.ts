@@ -1,4 +1,7 @@
-import { expose } from "https://cdn.skypack.dev/comlink?dts";
+/// <reference no-default-lib="true" />
+/// <reference lib="deno.worker" />
+
+import { expose } from "comlink";
 import type { Executable } from "../Executable.ts";
 import { ArrowFunction } from "../Workerpool.test.ts";
 

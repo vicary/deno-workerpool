@@ -55,10 +55,21 @@ export type WorkerpoolOptions<TPayload = JsonValue, TResult = unknown> = {
    * Called when a failing task has exceeded maximum retries.
    */
   failure?: (task: Task<TPayload>, error: Error) => Promisable<void>;
+
+  /**
+   * Called when the state of the pool is changed.
+   * 1. **active:** Workerpool becomes active via .start() or .enqueue().
+   * 2. **draining:** Workerpool is paused via .pause().
+   * 3. **drained:** All active runners are disposed via task exhaustion or pausing.
+   */
+  onStateChange?: (state: WorkerpoolState) => Promisable<void>;
 };
+
+export type WorkerpoolState = "running" | "draining" | "drained";
 
 export class Workerpool<TPayload = JsonValue, TResult = unknown> {
   #active = false;
+  #state: WorkerpoolState = "drained";
   #dequeueActive = false;
   #concurrency = 10;
   #maximumRetries = 0;
@@ -88,22 +99,43 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     return this.#runners.size;
   }
 
+  get state() {
+    return this.#state;
+  }
+
+  set state(value: WorkerpoolState) {
+    if (this.#state === value) return;
+
+    this.#state = value;
+    this.options.onStateChange?.bind(this)(this.#state);
+  }
+
   start() {
     if (this.#active) {
       return;
     }
 
     this.#active = true;
+    this.state = "running";
     this.#startDequeue();
 
     return this;
   }
 
+  /**
+   * Pause further task execution.
+   *
+   * Workerpool will start draining idle runners, and fires the drained()
+   * callback when all runners currently active are disposed.
+   */
   pause() {
-    this.#active = false;
+    if (!this.#active) return;
 
-    // Trigger runner disposal if the queue is already empty.
-    this.#startDequeue();
+    this.#active = false;
+    this.state = "draining";
+
+    // Drain immediately if queue is already empty.
+    this.#disposeIdleRunners();
   }
 
   /**
@@ -132,23 +164,22 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
   }
 
   async #startDequeue() {
-    if (!this.#active) {
-      return await this.#disposeIdleRunners();
-    }
-
     // The idea is to maintain one and only one active dequeuing chain at a time.
-    if (this.#dequeueActive) {
-      return;
-    }
+    if (this.#dequeueActive) return;
 
     this.#dequeueActive = true;
     return await this.#dequeue();
   }
 
-  async #dequeue() {
+  async #dequeue(): Promise<void> {
     if (!this.#active) {
       this.#dequeueActive = false;
-      return await this.#disposeIdleRunners();
+
+      if (this.#state === "draining") {
+        return await this.#disposeIdleRunners();
+      } else {
+        return;
+      }
     }
 
     const task = await this.options.dequeue();
@@ -177,8 +208,10 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
             task.executionCount < this.#maximumRetries
           ) {
             this.enqueue(task);
+          } else if (this.options.failure) {
+            return this.options.failure(task, error);
           } else {
-            this.options.failure?.(task, error);
+            throw error;
           }
         }
       )
@@ -197,10 +230,14 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     // Release idle runners
     const idleRunners = [...this.#runners].filter((runner) => !runner.busy);
 
-    await Promise.all(idleRunners.map((runner) => runner.dispose()));
-
     for (const runner of idleRunners) {
       this.#runners.delete(runner);
+    }
+
+    await Promise.all(idleRunners.map((runner) => runner.dispose()));
+
+    if (this.#runners.size === 0) {
+      this.state = "drained";
     }
   }
 

@@ -107,7 +107,8 @@ describe("Workerpool", () => {
     assertSpyCalls(callback, 4);
   });
 
-  it("should support web workers", async () => {
+  // Temporarily ignored, see https://github.com/GoogleChromeLabs/comlink/issues/598
+  it.ignore("should support web workers", async () => {
     let counter = 0;
     const callback = proxy(() => {
       counter++;

@@ -1,9 +1,9 @@
-import { proxy } from "https://cdn.skypack.dev/comlink?dts";
+import { proxy } from "comlink";
 import { assertEquals } from "https://deno.land/std@0.155.0/testing/asserts.ts";
 import { describe, it } from "https://deno.land/std@0.155.0/testing/bdd.ts";
 import {
   assertSpyCalls,
-  stub,
+  spy,
 } from "https://deno.land/std@0.155.0/testing/mock.ts";
 import { Class, SetOptional } from "type-fest";
 import { Executable } from "./Executable.ts";
@@ -54,14 +54,21 @@ describe("Workerpool", () => {
           }
 
           success?.(task, result);
+        },
+        onStateChange: (state) => {
+          if (state !== "drained") return;
 
-          if (queue.length === 0) {
-            resolve(pool);
+          if (queue.length > 0) {
+            throw new Error(`Drained with ${queue.length} tasks remaining.`);
           }
+
+          resolve(pool);
         },
       });
 
-      tasks.forEach((task) => pool.enqueue(task));
+      for (const task of tasks) {
+        pool.enqueue(task);
+      }
 
       pool.start();
     });
@@ -74,7 +81,7 @@ describe("Workerpool", () => {
   }
 
   it("should process all tasks", async () => {
-    const callback = stub({ callback: () => {} }, "callback");
+    const callback = spy(() => {});
     await createMockQueue({
       concurrency: 2,
       workers: [workerA],
@@ -92,7 +99,7 @@ describe("Workerpool", () => {
   it("should swap workers when concurrency is reached", async () => {
     class workerB extends workerA {}
 
-    const callback = stub({ callback: () => {} }, "callback");
+    const callback = spy(() => {});
     await createMockQueue({
       concurrency: 1,
       workers: [workerA, workerB],
@@ -121,9 +128,11 @@ describe("Workerpool", () => {
     }
 
     const pool = await createMockQueue({
-      concurrency: 1,
+      concurrency: 2,
       workers: [workerC],
       tasks: [
+        { name: "workerC", payload: callback },
+        { name: "workerC", payload: callback },
         { name: "workerC", payload: callback },
         { name: "workerC", payload: callback },
       ],

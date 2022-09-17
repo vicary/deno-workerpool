@@ -121,7 +121,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     if (this.#state === value) return;
 
     this.#state = value;
-    this.options.onStateChange?.bind(this)(this.#state);
+    this.options.onStateChange?.bind(this)(value);
   }
 
   start() {
@@ -166,8 +166,12 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     const doEnqueue = async () => {
       await this.options.enqueue({ executionCount, ...task });
 
-      // Don't await for task executions here.
-      if (this.#active && this.#runners.size === 0) {
+      // Restart dequeue if we still have concurrent capacity.
+      if (
+        this.#active &&
+        (this.#runners.size < this.#concurrency ||
+          [...this.#runners].some(({ busy }) => !busy))
+      ) {
         this.#startDequeue();
       }
     };
@@ -182,6 +186,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     if (this.#dequeueActive) return;
 
     this.#dequeueActive = true;
+    this.state = "running";
     return await this.#dequeue();
   }
 

@@ -79,6 +79,11 @@ const pool = new Workerpool<Payload>({
       console.log(result);
     }
   },
+  onStateChange(state) {
+    if (state === "drained") {
+      pool.enqueue({...}); // Support immediate restarting of an idle queue.
+    }
+  }
 });
 ```
 

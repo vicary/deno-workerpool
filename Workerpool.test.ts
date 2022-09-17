@@ -45,7 +45,7 @@ describe("Workerpool", () => {
             return task;
           }
         },
-        success: (_, { task }) => {
+        onTaskFinished: (_error, _result, { task }) => {
           const index = queue.indexOf(task);
           if (index > -1) {
             queue.splice(index, 1);

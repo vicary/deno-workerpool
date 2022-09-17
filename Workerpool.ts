@@ -51,21 +51,20 @@ export type WorkerpoolOptions<TPayload = JsonValue, TResult = unknown> = {
   dequeue: () => Promisable<Task<TPayload> | undefined>;
 
   /**
-   * Called when a dequeued task is successful, use this function to remove
-   * finished tasks (mutex).
+   * Callback style task handler.
    */
-  success?: (
-    result: TResult,
-    context: CallbackContext<TPayload, TResult>
-  ) => Promisable<void>;
-
-  /**
-   * Called when a failing task has exceeded maximum retries.
-   */
-  failure?: (
-    error: Error,
-    context: CallbackContext<TPayload, TResult>
-  ) => Promisable<void>;
+  onTaskFinished?: {
+    (
+      error: Error,
+      result: null,
+      context: CallbackContext<TPayload, TResult>
+    ): Promisable<void>;
+    (
+      error: null,
+      result: TResult,
+      context: CallbackContext<TPayload, TResult>
+    ): Promisable<void>;
+  };
 
   /**
    * Called when the state of the pool is changed.
@@ -127,7 +126,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
 
   start() {
     if (this.#active) {
-      return;
+      return this;
     }
 
     this.#active = true;
@@ -221,7 +220,8 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     runner
       .execute(task.payload)
       .then(
-        (result) => this.options.success?.(result, { task, runner }),
+        (result) =>
+          this.options.onTaskFinished?.(null, result, { task, runner }),
         (error) => {
           if (
             error instanceof RunnerExecutionError &&
@@ -229,8 +229,8 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
             task.executionCount < this.#maximumRetries
           ) {
             this.enqueue(task);
-          } else if (this.options.failure) {
-            return this.options.failure(error, { task, runner });
+          } else if (this.options.onTaskFinished) {
+            return this.options.onTaskFinished(error, null, { task, runner });
           } else {
             throw error;
           }

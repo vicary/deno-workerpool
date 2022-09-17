@@ -49,18 +49,17 @@ As a proof of concept, this is the most basic implementation of an in-memory que
 
 ```ts
 type Payload = any;
-
 type MemoryMutexTask = Task<Payload> & { active?: boolean };
 
-const tasks = new Set() < MemoryMutexTask > [];
+const tasks = new Set<MemoryMutexTask>();
 const pool = new Workerpool<Payload>({
   concurrency: 1,
   runners: [runnerA, runnerB],
-  enqueue: (task: MemoryMutexTask) => {
+  enqueue(task: MemoryMutexTask) {
     task.active = false;
     tasks.add(task);
   },
-  dequeue: () => {
+  dequeue() {
     // Uncomment the following line for FIFO queues
     // if ([...tasks].find(({ active }) => active)) return;
 
@@ -70,18 +69,14 @@ const pool = new Workerpool<Payload>({
       return task;
     }
   },
-  success: (result, { task }) => {
-    console.log("Result:", result);
+  onTaskFinish(error, result, { task }) {
+    tasks.delete(task);
 
-    const index = tasks.indexOf(task);
-    if (index > -1) {
-      tasks.splice(index, 1);
+    if (error) {
+      console.error(error);
+    } else {
+      console.log(result);
     }
-  },
-  failure: (error, { task }) => {
-    console.error(error);
-
-    const index = tasks.indexOf(task);
   },
 });
 ```

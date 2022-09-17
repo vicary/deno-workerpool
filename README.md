@@ -61,12 +61,13 @@ const pool = new Workerpool<Payload>({
   },
   dequeue() {
     // Uncomment the following line for FIFO queues
-    // if ([...tasks].find(({ active }) => active)) return;
+    // if ([...tasks].some(({ active }) => active)) return;
 
-    const task = [...tasks].find(({ active }) => !active);
-    if (task) {
-      task.active = true;
-      return task;
+    for (const task of tasks) {
+      if (!task.active) {
+        task.busy = true;
+        return task;
+      }
     }
   },
   onTaskFinish(error, result, { task }) {

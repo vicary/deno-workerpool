@@ -3,6 +3,11 @@ import { Executable } from "./Executable.ts";
 import { Runner, RunnerExecutionError } from "./Runner.ts";
 import { Task } from "./Task.ts";
 
+type CallbackContext<TPayload = JsonValue, TResult = unknown> = {
+  task: Task<TPayload>;
+  runner: Runner<TPayload, TResult>;
+};
+
 export type WorkerpoolOptions<TPayload = JsonValue, TResult = unknown> = {
   /**
    * Worker classes implementing the Executable interface.
@@ -49,12 +54,18 @@ export type WorkerpoolOptions<TPayload = JsonValue, TResult = unknown> = {
    * Called when a dequeued task is successful, use this function to remove
    * finished tasks (mutex).
    */
-  success?: (task: Task<TPayload>, result: TResult) => Promisable<void>;
+  success?: (
+    result: TResult,
+    context: CallbackContext<TPayload, TResult>
+  ) => Promisable<void>;
 
   /**
    * Called when a failing task has exceeded maximum retries.
    */
-  failure?: (task: Task<TPayload>, error: Error) => Promisable<void>;
+  failure?: (
+    error: Error,
+    context: CallbackContext<TPayload, TResult>
+  ) => Promisable<void>;
 
   /**
    * Called when the state of the pool is changed.
@@ -99,6 +110,10 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     return this.#runners.size;
   }
 
+  get paused() {
+    return !this.#active;
+  }
+
   get state() {
     return this.#state;
   }
@@ -128,14 +143,14 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
    * Workerpool will start draining idle runners, and fires the drained()
    * callback when all runners currently active are disposed.
    */
-  pause() {
+  pause(): Promisable<void> {
     if (!this.#active) return;
 
     this.#active = false;
     this.state = "draining";
 
     // Drain immediately if queue is already empty.
-    this.#disposeIdleRunners();
+    return this.#disposeIdleRunners();
   }
 
   /**
@@ -186,11 +201,17 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     // No tasks available, mark inactive and wait for next enqueue.
     if (!task) {
       this.#dequeueActive = false;
-      return await this.#disposeIdleRunners();
+
+      // Set drained if all runners are already idle.
+      if ([...this.#runners].every(({ busy }) => !busy)) {
+        this.state = "drained";
+      }
+
+      return;
     }
 
     const runner = this.#getRunner(task.name);
-    // No runners available yet, wait for the next dequeue.
+    // No runners available yet, put the task back and wait.
     if (!runner) {
       return await this.options.enqueue(task);
     }
@@ -200,7 +221,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     runner
       .execute(task.payload)
       .then(
-        (result) => this.options.success?.(task, result),
+        (result) => this.options.success?.(result, { task, runner }),
         (error) => {
           if (
             error instanceof RunnerExecutionError &&
@@ -209,7 +230,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
           ) {
             this.enqueue(task);
           } else if (this.options.failure) {
-            return this.options.failure(task, error);
+            return this.options.failure(error, { task, runner });
           } else {
             throw error;
           }

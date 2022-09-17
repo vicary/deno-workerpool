@@ -2,10 +2,6 @@
 
 An unopinionated small scale worker pool abstraction which serves as a base interface for more advanced worker managers.
 
-**Note:** This is NOT a drop-in replacement of the NPM `workerpool`, but it's easy to create the same functionality (see _Web Workers_ section below).
-
-**Note:** This is not yet a good candidate for large scale distributed queues, cluster awareness such as mutex and event ack have to be in place before that. If you think solutions in such a scale is viable in Deno, consider [buy me a coffee](https://buymeacoffee.com/vicary) and I'll make it happen.
-
 ## Terminology
 
 1. **Workerpool**
@@ -31,17 +27,17 @@ An unopinionated small scale worker pool abstraction which serves as a base inte
 ```ts
 import { Executable, Workerpool } from "https://deno.land/x/workerpool/mod.ts";
 
-class FooWorker implements Executable {...}
-class BarWorker implements Executable {...}
+class RunnerA implements Executable {...}
+class RunnerB implements Executable {...}
 
 const pool = new Workerpool({
   concurrency: 2,
-  workers: [FooWorker, BarWorker]
+  workers: [RunnerA, RunnerB]
 });
 
 pool
-  .enqueue({ name: "FooWorker", payload: {...} })
-  .enqueue({ name: "BarWorker", payload: {...} })
+  .enqueue({ name: "RunnerA", payload: {...} })
+  .enqueue({ name: "RunnerB", payload: {...} })
   .start();
 ```
 
@@ -56,32 +52,36 @@ type Payload = any;
 
 type MemoryMutexTask = Task<Payload> & { active?: boolean };
 
-const tasks: MemoryMutexTask[] = [];
+const tasks = new Set() < MemoryMutexTask > [];
 const pool = new Workerpool<Payload>({
   concurrency: 1,
   runners: [runnerA, runnerB],
   enqueue: (task: MemoryMutexTask) => {
-    if (tasks.includes(task)) {
-      task.active = false;
-    } else {
-      tasks.push(task);
-    }
+    task.active = false;
+    tasks.add(task);
   },
   dequeue: () => {
     // Uncomment the following line for FIFO queues
-    // if (tasks.find(({ active }) => active)) return;
+    // if ([...tasks].find(({ active }) => active)) return;
 
-    const task = tasks.find(({ active }) => !active);
+    const task = [...tasks].find(({ active }) => !active);
     if (task) {
       task.active = true;
       return task;
     }
   },
-  success: (task) => {
+  success: (result, { task }) => {
+    console.log("Result:", result);
+
     const index = tasks.indexOf(task);
     if (index > -1) {
       tasks.splice(index, 1);
     }
+  },
+  failure: (error, { task }) => {
+    console.error(error);
+
+    const index = tasks.indexOf(task);
   },
 });
 ```
@@ -111,7 +111,7 @@ Now register the runners into the workerpool:
 ```ts
 import { ExecutableWorker } from "https://deno.land/x/workerpool/mod.ts";
 
-class MyWorker extends ExecutableWorker<string, void> {
+class MyRunner extends ExecutableWorker<string, void> {
   constructor() {
     super(new URL("./worker.ts", import.meta.url).href);
   }
@@ -119,11 +119,15 @@ class MyWorker extends ExecutableWorker<string, void> {
 
 const pool = new Workerpool({
   concurrency: 1,
-  workers: [MyWorker],
+  workers: [MyRunner],
 });
 
 pool
-  .enqueue({ name: "MyWorker", payload: "Hello World!" })
-  .enqueue({ name: "MyWorker", payload: "Hello Again!" })
+  .enqueue({ name: "MyRunner", payload: "Hello World!" })
+  .enqueue({ name: "MyRunner", payload: "Hello Again!" })
   .start();
 ```
+
+## Sponsorship
+
+If you appreciate my work, or want to see specific features to happen, [a coffee would do](https://buymeacoffee.com/vicary).

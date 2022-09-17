@@ -9,13 +9,12 @@ import { Class, SetOptional } from "type-fest";
 import { Executable } from "./Executable.ts";
 import { ExecutableWorker } from "./ExecutableWorker.ts";
 import { Task } from "./Task.ts";
-import { Workerpool, WorkerpoolOptions } from "./Workerpool.ts";
+import { Workerpool } from "./Workerpool.ts";
 
 export type ArrowFunction = (...args: unknown[]) => unknown;
 type MemoryMutexTask<TPayload> = Task<TPayload> & { active?: boolean };
 type PreparePoolOptions<TPayload, TResult> = {
   concurrency: number;
-  success?: WorkerpoolOptions<TPayload, TResult>["success"];
   tasks: SetOptional<Task<TPayload>, "executionCount">[];
   workers: Class<Executable<TPayload, TResult>>[];
 };
@@ -24,7 +23,6 @@ describe("Workerpool", () => {
   // In-memory FIFO awaiable queue.
   const createMockQueue = async <TPayload, TResult = unknown>({
     concurrency,
-    success,
     tasks,
     workers,
   }: PreparePoolOptions<TPayload, TResult>) =>
@@ -47,13 +45,11 @@ describe("Workerpool", () => {
             return task;
           }
         },
-        success: (task, result) => {
+        success: (_, { task }) => {
           const index = queue.indexOf(task);
           if (index > -1) {
             queue.splice(index, 1);
           }
-
-          success?.(task, result);
         },
         onStateChange: (state) => {
           if (state !== "drained") return;

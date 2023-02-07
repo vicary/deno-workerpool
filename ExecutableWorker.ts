@@ -1,5 +1,5 @@
 import { releaseProxy, Remote, UnproxyOrClone, wrap } from "comlink";
-import { Promisable } from "type-fest";
+import type { Promisable } from "type-fest";
 import type { Executable } from "./Executable.ts";
 
 /**

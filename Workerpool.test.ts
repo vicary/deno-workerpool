@@ -5,7 +5,7 @@ import {
   assertSpyCalls,
   spy,
 } from "https://deno.land/std@0.155.0/testing/mock.ts";
-import { Class, SetOptional } from "type-fest";
+import type { Class, SetOptional } from "type-fest";
 import { Executable } from "./Executable.ts";
 import { ExecutableWorker } from "./ExecutableWorker.ts";
 import { Task } from "./Task.ts";

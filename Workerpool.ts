@@ -1,4 +1,4 @@
-import { Class, JsonValue, Promisable, SetOptional } from "type-fest";
+import type { Class, JsonValue, Promisable, SetOptional } from "type-fest";
 import { Executable } from "./Executable.ts";
 import { Runner, RunnerExecutionError } from "./Runner.ts";
 import { Task } from "./Task.ts";
@@ -68,13 +68,15 @@ export type WorkerpoolOptions<TPayload = JsonValue, TResult = unknown> = {
 
   /**
    * Called when the state of the pool is changed.
-   * 1. **active:** Workerpool becomes active via .start() or .enqueue().
-   * 2. **draining:** Workerpool is paused via .pause().
-   * 3. **drained:** All active runners are disposed via task exhaustion or pausing.
    */
   onStateChange?: (state: WorkerpoolState) => Promisable<void>;
 };
 
+/**
+ * 1. **running:** Workerpool becomes active via .start() or .enqueue().
+ * 2. **draining:** Workerpool is paused via .pause().
+ * 3. **drained:** All active runners are disposed via task exhaustion or pausing.
+ */
 export type WorkerpoolState = "running" | "draining" | "drained";
 
 export class Workerpool<TPayload = JsonValue, TResult = unknown> {

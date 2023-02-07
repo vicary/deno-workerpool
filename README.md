@@ -95,7 +95,7 @@ You'll need a separated script file for the worker.
 
 ```ts
 // worker.ts
-import { expose } from "https://cdn.skypack.dev/comlink?dts";
+import { expose } from "https://deno.land/x/comlink/mod.ts";
 
 expose({
   execute: async (payload: string) => {

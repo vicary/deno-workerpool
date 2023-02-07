@@ -131,4 +131,4 @@ pool
 
 ## Sponsorship
 
-If you appreciate my work, or want to see specific features to happen, [a coffee would do](https://buymeacoffee.com/vicary).
+If you appreciate my work, or want to see specific features to happen, [a coffee would do](https://www.github.com/sponsors/vicary).

@@ -1,7 +1,7 @@
 {
   "importMap": "./deno.json",
   "imports": {
-    "comlink": "https://raw.githubusercontent.com/vicary/comlink/8700074/src/comlink.ts",
-    "type-fest": "https://raw.githubusercontent.com/vicary/type-fest/main/mod.ts"
+    "comlink": "https://deno.land/x/comlink@4.3.1/mod.ts",
+    "type-fest": "https://deno.land/x/fest@v3.5.6/mod.ts"
   }
 }

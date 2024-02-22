@@ -24,6 +24,9 @@ An unopinionated small scale worker pool abstraction which serves as a base inte
 
 ## Basic Usage
 
+You need to implement your own `enqueue` and `dequeue` logic, see an in-memory
+implementation in the examples section.
+
 ```ts
 import { Executable, Workerpool } from "https://deno.land/x/workerpool/mod.ts";
 
@@ -33,6 +36,8 @@ class RunnerB implements Executable {...}
 const pool = new Workerpool({
   concurrency: 2,
   workers: [RunnerA, RunnerB]
+  // enqueue() {...}
+  // dequeue() {...}
 });
 
 pool
@@ -41,11 +46,11 @@ pool
   .start();
 ```
 
-## Runner Examples
+## Examples
 
 ### In-memory Queue
 
-As a proof of concept, this is the most basic implementation of an in-memory queue.
+As a proof of concept, this is a simple implementation of an in-memory queue.
 
 ```ts
 type Payload = any;
@@ -54,23 +59,23 @@ type MemoryMutexTask = Task<Payload> & { active?: boolean };
 const tasks = new Set<MemoryMutexTask>();
 const pool = new Workerpool<Payload>({
   concurrency: 1,
-  runners: [runnerA, runnerB],
+  workers: [RunnerA, RunnerB],
   enqueue(task: MemoryMutexTask) {
     task.active = false;
     tasks.add(task);
   },
   dequeue() {
     // Uncomment the following line for FIFO queues
-    // if ([...tasks].some(({ active }) => active)) return;
+    // for (const { active } of task) if (active) return;
 
     for (const task of tasks) {
       if (!task.active) {
-        task.busy = true;
+        task.active = true;
         return task;
       }
     }
   },
-  onTaskFinish(error, result, { task }) {
+  onTaskFinished(error, result, { task }) {
     tasks.delete(task);
 
     if (error) {

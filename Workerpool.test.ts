@@ -1,15 +1,14 @@
-import { proxy } from "comlink";
 import { assertEquals } from "https://deno.land/std@0.155.0/testing/asserts.ts";
 import { describe, it } from "https://deno.land/std@0.155.0/testing/bdd.ts";
 import {
   assertSpyCalls,
   spy,
 } from "https://deno.land/std@0.155.0/testing/mock.ts";
-import type { Class, SetOptional } from "type-fest";
 import { Executable } from "./Executable.ts";
 import { ExecutableWorker } from "./ExecutableWorker.ts";
 import { Task } from "./Task.ts";
 import { Workerpool } from "./Workerpool.ts";
+import { comlink, type Class, type SetOptional } from "./deps.ts";
 
 export type ArrowFunction = (...args: unknown[]) => unknown;
 type MemoryMutexTask<TPayload> = Task<TPayload> & { active?: boolean };
@@ -113,7 +112,7 @@ describe("Workerpool", () => {
   // Temporarily ignored, see https://github.com/GoogleChromeLabs/comlink/issues/598
   it.ignore("should support web workers", async () => {
     let counter = 0;
-    const callback = proxy(() => {
+    const callback = comlink.proxy(() => {
       counter++;
     });
 

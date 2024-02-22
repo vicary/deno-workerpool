@@ -1,6 +1,10 @@
-import { releaseProxy, Remote, UnproxyOrClone, wrap } from "comlink";
-import type { Promisable } from "type-fest";
-import type { Executable } from "./Executable.ts";
+import {
+  comlink,
+  type Promisable,
+  type Remote,
+  type UnproxyOrClone,
+} from "./deps.ts";
+import { type Executable } from "./Executable.ts";
 
 /**
  * A Web Worker implementation in a `workerpool` compatible format, uses
@@ -20,7 +24,7 @@ export class ExecutableWorker<
 
   constructor(uri: string, options?: Omit<WorkerOptions, "type">) {
     this.#worker = new Worker(uri, { ...options, type: "module" });
-    this.#linked = wrap<Executable<TPayload, TResult>>(this.#worker);
+    this.#linked = comlink.wrap<Executable<TPayload, TResult>>(this.#worker);
   }
 
   execute(payload: TPayload) {
@@ -40,7 +44,7 @@ export class ExecutableWorker<
   }
 
   async dispose() {
-    await this.#linked[releaseProxy]();
+    await this.#linked[comlink.releaseProxy]();
     this.#worker.terminate();
   }
 }

@@ -1,7 +1,7 @@
-import type { Class, JsonValue, Promisable, SetOptional } from "type-fest";
-import { Executable } from "./Executable.ts";
+import type { Class, JsonValue, Promisable, SetOptional } from "./deps.ts";
+import type { Executable } from "./Executable.ts";
 import { Runner, RunnerExecutionError } from "./Runner.ts";
-import { Task } from "./Task.ts";
+import type { Task } from "./Task.ts";
 
 type CallbackContext<TPayload = JsonValue, TResult = unknown> = {
   task: Task<TPayload>;

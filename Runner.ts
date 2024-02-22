@@ -1,4 +1,4 @@
-import { Executable } from "./Executable.ts";
+import { type Executable } from "./Executable.ts";
 
 export class RunnerExecutionError extends Error {
   constructor(

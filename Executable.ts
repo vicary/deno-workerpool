@@ -1,4 +1,4 @@
-import type { Promisable } from "type-fest";
+import { type Promisable } from "./deps.ts";
 
 /**
  * The Runner interface.

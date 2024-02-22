@@ -1,4 +1,4 @@
-import type { JsonValue } from "type-fest";
+import { type JsonValue } from "./deps.ts";
 
 export interface Task<TPayload = JsonValue> {
   /**

@@ -8,7 +8,7 @@ import { Executable } from "./Executable.ts";
 import { ExecutableWorker } from "./ExecutableWorker.ts";
 import { Task } from "./Task.ts";
 import { Workerpool } from "./Workerpool.ts";
-import { comlink, type Class, type SetOptional } from "./deps.ts";
+import { type Class, comlink, type SetOptional } from "./deps.ts";
 
 export type ArrowFunction = (...args: unknown[]) => unknown;
 type MemoryMutexTask<TPayload> = Task<TPayload> & { active?: boolean };

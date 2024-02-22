@@ -4,7 +4,7 @@ export class RunnerExecutionError extends Error {
   constructor(
     message: string,
     readonly name: string,
-    readonly retryable = false
+    readonly retryable = false,
   ) {
     super(message);
   }
@@ -22,7 +22,7 @@ export class Runner<TPayload = unknown, TResult = unknown> {
 
   constructor(
     readonly runner: Executable<TPayload, TResult>,
-    readonly name: string
+    readonly name: string,
   ) {}
 
   get busy() {
@@ -68,7 +68,7 @@ export class Runner<TPayload = unknown, TResult = unknown> {
       throw new RunnerExecutionError(
         error.message,
         error.name,
-        retryable ?? true
+        retryable ?? true,
       );
     } finally {
       this.#executionnCount++;

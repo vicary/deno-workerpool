@@ -1,13 +1,9 @@
-import { type Promisable } from "./deps.ts";
+import { comlink, type Promisable } from "./deps.ts";
 
 /**
  * The Runner interface.
  */
-export interface Executable<
-  TPayload = unknown,
-  TResult = unknown,
-  TError extends Error = Error
-> {
+export interface Executable<TPayload, TResult, TError extends Error = Error> {
   execute: (payload: TPayload) => Promisable<TResult>;
 
   onSuccess?: (result: TResult) => Promisable<void>;
@@ -26,3 +22,16 @@ export interface Executable<
    */
   dispose?: () => Promisable<void>;
 }
+
+export const initializeWorker = <
+  T extends // deno-lint-ignore no-explicit-any
+  Executable<any, any>,
+>(
+  callbacks: T,
+) => {
+  if (!(self instanceof WorkerGlobalScope)) {
+    throw new Error("This module is only intended to be used in a worker.");
+  }
+
+  comlink.expose(callbacks);
+};

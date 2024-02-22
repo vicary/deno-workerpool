@@ -57,12 +57,12 @@ export type WorkerpoolOptions<TPayload = JsonValue, TResult = unknown> = {
     (
       error: Error,
       result: null,
-      context: CallbackContext<TPayload, TResult>
+      context: CallbackContext<TPayload, TResult>,
     ): Promisable<void>;
     (
       error: null,
       result: TResult,
-      context: CallbackContext<TPayload, TResult>
+      context: CallbackContext<TPayload, TResult>,
     ): Promisable<void>;
   };
 
@@ -241,7 +241,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
           } else {
             throw error;
           }
-        }
+        },
       )
       .finally(() => {
         if (runner.executionCount >= this.#maximumTaskPerRunner) {
@@ -272,7 +272,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
   #getRunner(name: string): Runner<TPayload, TResult> | undefined {
     const idleRunners = [...this.#runners].filter((runner) => !runner.busy);
     const runner = idleRunners.find(
-      ({ name: runnerName }) => runnerName === name
+      ({ name: runnerName }) => runnerName === name,
     );
     if (runner) {
       return runner;
@@ -286,7 +286,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
 
       const runnerInstance = new Runner<TPayload, TResult>(
         new executableClass(),
-        executableClass.name
+        executableClass.name,
       );
 
       this.#runners.add(runnerInstance);
@@ -295,7 +295,7 @@ export class Workerpool<TPayload = JsonValue, TResult = unknown> {
     } else {
       // Discard idle runners of other types, if available.
       const idleRunner = idleRunners.find(
-        ({ name: runnerName }) => runnerName !== name
+        ({ name: runnerName }) => runnerName !== name,
       );
 
       if (idleRunner) {

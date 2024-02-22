@@ -16,9 +16,8 @@ import { type Executable } from "./Executable.ts";
 export class ExecutableWorker<
   TPayload = unknown,
   TResult = unknown,
-  TError extends Error = Error
-> implements Executable<TPayload, TResult, TError>
-{
+  TError extends Error = Error,
+> implements Executable<TPayload, TResult, TError> {
   #worker: Worker;
   #linked: Remote<Executable<TPayload, TResult>>;
 

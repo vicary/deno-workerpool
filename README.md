@@ -1,22 +1,27 @@
 # Workerpool
 
-An unopinionated small scale worker pool abstraction which serves as a base interface for more advanced worker managers.
+An unopinionated small scale worker pool abstraction which serves as a base
+interface for more advanced worker managers.
 
 ## Terminology
 
 1. **Workerpool**
 
-   A manager that creates workers on the fly, executing tasks up to defined concurrency.
+   A manager that creates workers on the fly, executing tasks up to defined
+   concurrency.
 
 2. **Runner**
 
-   Runners are internal wrappers for user provided runner classes, they maintain internal states such as active/busy and the retry counter.
+   Runners are internal wrappers for user provided runner classes, they maintain
+   internal states such as active/busy and the retry counter.
 
 3. **Executable**
 
-   User implementation of task executors, where they all implements the `Executable` interface.
+   User implementation of task executors, where they all implements the
+   `Executable` interface.
 
-   Also called _workers_ for the sake of naming convension, but the usage kept minimal to avoid confusion with Web Workers.
+   Also called _workers_ for the sake of naming convension, but the usage kept
+   minimal to avoid confusion with Web Workers.
 
 4. **Task**
 
@@ -94,25 +99,8 @@ const pool = new Workerpool<Payload>({
 
 ### Web Workers
 
-Deno has built-in support for workers, our `ExecutableWorker` class serves as a simple proxy class via `comlink`.
-
-You'll need a separated script file for the worker.
-
-```ts
-// worker.ts
-import { expose } from "https://deno.land/x/comlink/mod.ts";
-
-expose({
-  execute: async (payload: string) => {
-    // Simulate async actions
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    return `Worker echo: ${payload}`;
-  },
-});
-```
-
-Now register the runners into the workerpool:
+Deno has built-in support for workers, our `ExecutableWorker` class serves as a
+simple proxy class via `comlink`.
 
 ```ts
 import { ExecutableWorker } from "https://deno.land/x/workerpool/mod.ts";
@@ -122,8 +110,28 @@ class MyRunner extends ExecutableWorker<string, void> {
     super(new URL("./worker.ts", import.meta.url).href);
   }
 }
+```
 
-const pool = new Workerpool({
+You'll also need a separated script file for the worker itself.
+
+```ts
+// worker.ts
+import { initializeWorker } from "https://deno.land/x/workerpool/mod.ts";
+
+initializeWorker({
+  execute: async (payload: string) => {
+    // Simulate async actions
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    return `Worker echo: ${payload}`;
+  },
+});
+```
+
+Now register the runner into the workerpool:
+
+```ts
+const pool = new Workerpool<string, void>({
   concurrency: 1,
   workers: [MyRunner],
 });
@@ -136,4 +144,5 @@ pool
 
 ## Sponsorship
 
-If you appreciate my work, or want to see specific features to happen, [a coffee would do](https://www.github.com/sponsors/vicary).
+If you appreciate my work, or want to see specific features to happen,
+[a coffee would do](https://www.github.com/sponsors/vicary).
